@@ -206,8 +206,18 @@ function decodeInt64AsFloat64(
     isSigned: boolean,
 ): Float64Array {
     if (streamMetadata.physicalLevelTechnique === PhysicalLevelTechnique.VARINT) {
+        const start = offset.get();
         const values = decodeVarintFloat64(data, offset, streamMetadata.numValues);
-        return decodeFloat64Values(values, streamMetadata, isSigned);
+        const usesZigZag = isSigned || streamMetadata.logicalLevelTechnique1 === LogicalLevelTechnique.DELTA;
+        if (!usesZigZag || values.every((value) => value >= 0 && Number.isSafeInteger(value))) {
+            return decodeFloat64Values(values, streamMetadata, isSigned);
+        }
+
+        // ZigZag stores the sign in the low bit. For example, a delta of -(2^52 + 1)
+        // between two safe IDs encodes as 2^53 + 1. Float64 rounds that to 2^53,
+        // turning the decrease into an increase and shifting subsequent IDs.
+        // Reread the original bytes as BigInt so the sign survives decoding.
+        offset.set(start);
     }
 
     const values = decodePhysicalLevelTechniqueInt64(data, offset, streamMetadata);

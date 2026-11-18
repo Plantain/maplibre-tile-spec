@@ -524,6 +524,28 @@ describe("decodeInt64AsFloat64Stream", () => {
         expect(result).toEqual(expectedValues);
     });
 
+    it("should preserve a 54-bit ZigZag delta between safe unsigned IDs", () => {
+        const ids = new BigInt64Array([1n, 2n ** 52n + 2n, 1n, 2n]);
+        const data = encodeInt64SignedDelta(ids);
+        const metadata = createStreamMetadata(LogicalLevelTechnique.DELTA, LogicalLevelTechnique.NONE, ids.length);
+        const offset = new IntWrapper(0);
+
+        expect(decodeUnsignedInt64AsFloat64Stream(data, offset, metadata)).toEqual(Float64Array.from(ids, Number));
+        expect(offset.get()).toBe(data.length);
+    });
+
+    it("should preserve the sign of a repeated wide ZigZag value", () => {
+        const value = -(2n ** 52n + 1n);
+        const data = encodeInt64SignedRle([[3, value]]);
+        const metadata = createRleMetadata(LogicalLevelTechnique.RLE, LogicalLevelTechnique.NONE, 1, 3);
+        const offset = new IntWrapper(0);
+
+        expect(decodeSignedInt64AsFloat64Stream(data, offset, metadata)).toEqual(
+            new Float64Array(3).fill(Number(value)),
+        );
+        expect(offset.get()).toBe(data.length);
+    });
+
     it("should decode DELTA with RLE", () => {
         const expectedValues = new Float64Array([10, 12, 14, 16, 18]);
         const runs = 2;
